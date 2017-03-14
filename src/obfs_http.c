@@ -52,6 +52,7 @@ static const char *http_response_template =
 static int obfs_http_request(buffer_t *, size_t, obfs_t *);
 static int obfs_http_response(buffer_t *, size_t, obfs_t *);
 static int deobfs_http_header(buffer_t *, size_t, obfs_t *);
+static int deobfs_http_request(buffer_t *, size_t, obfs_t *);
 static int check_http_header(buffer_t *buf);
 static void disable_http(obfs_t *obfs);
 static int is_enable_http(obfs_t *obfs);
@@ -64,7 +65,7 @@ static obfs_para_t obfs_http_st = {
     .port            = 80,
     .obfs_request    = &obfs_http_request,
     .obfs_response   = &obfs_http_response,
-    .deobfs_request  = &deobfs_http_header,
+    .deobfs_request  = &deobfs_http_request,
     .deobfs_response = &deobfs_http_header,
     .check_obfs      = &check_http_header,
     .disable         = &disable_http,
@@ -187,6 +188,96 @@ deobfs_http_header(buffer_t *buf, size_t cap, obfs_t *obfs)
 }
 
 static int
+deobfs_http_request(buffer_t *buf, size_t cap, obfs_t *obfs)
+{
+    if (obfs == NULL || obfs->deobfs_stage != 0) return 0;
+
+    char *data = buf->data;
+    int len    = buf->len;
+    int err    = -1;
+
+    char *headerdata;
+
+    int result = -1;
+    if (strncasecmp(data, "GET", 3) == 0)
+    {
+        result = get_header("GET", data, len, &headerdata);
+    }
+    if (strncasecmp(data, "POST", 4) == 0)
+    {
+        result = get_header("POST", data, len, &headerdata);
+    }
+
+    while (len > 4) {
+        if (data[0] == '\r' && data[1] == '\n'
+            && data[2] == '\r' && data[3] == '\n') {
+            len  -= 4;
+            data += 4;
+            err   = 0;
+            break;
+        }
+        len--;
+        data++;
+    }
+
+    if(!err)
+    {
+        char obfsdata[512];
+        size_t obfs_len = 0;
+
+        if(result > 0 && headerdata != NULL)
+        {
+            char *delim = "%";
+            char *delim_whitespace = " ";
+
+            char *hexdata = strtok(headerdata, delim_whitespace);
+            //LOGI("%s",hexdata);
+
+            char *hexvalue = NULL, *ptr = NULL;
+
+            hexvalue = strtok_r(hexdata, delim, &ptr);
+            hexvalue = strtok_r(NULL, delim, &ptr);
+
+            int pos = -1;
+            while (hexvalue != NULL) {
+                size_t hexvalue_len = strlen(hexvalue);
+
+                if(hexvalue_len > 2)
+                {
+                    hexvalue += hexvalue_len - 2;
+                }
+
+                obfsdata[++pos] = strtol(hexvalue,NULL,16);
+
+                hexvalue = strtok_r(NULL, delim, &ptr);
+            }
+
+            obfs_len = pos + 1;
+            obfsdata[obfs_len] = '\0';
+        }
+
+        if(obfs_len)
+        {
+            memmove(buf->data + obfs_len, data, len);
+            memcpy(buf->data, obfsdata, obfs_len);
+            buf->len = obfs_len + len;
+        }
+        else
+        {
+            memmove(buf->data, data, len);
+            buf->len = len;
+        }
+        obfs->deobfs_stage++;
+    }
+
+    if(headerdata != NULL)
+        free(headerdata);
+
+    return err;
+}
+
+
+static int
 check_http_header(buffer_t *buf)
 {
     char *data = buf->data;
@@ -195,25 +286,8 @@ check_http_header(buffer_t *buf)
     if (len < 4)
         return OBFS_NEED_MORE;
 
-    if (strncasecmp(data, "GET", 3) != 0)
+    if (strncasecmp(data, "GET", 3) != 0 && strncasecmp(data, "POST", 4) != 0)
         return OBFS_ERROR;
-
-    {
-        char *protocol;
-        int result = get_header("Upgrade:", data, len, &protocol);
-        if (result < 0) {
-            if (result == -1)
-                return OBFS_NEED_MORE;
-            else
-                return OBFS_ERROR;
-        }
-        if (strncmp(protocol, "websocket", result) != 0) {
-            free(protocol);
-            return OBFS_ERROR;
-        } else {
-            free(protocol);
-        }
-    }
 
     if (obfs_http->host != NULL) {
         char *hostname;
@@ -250,15 +324,33 @@ check_http_header(buffer_t *buf)
     return OBFS_OK;
 }
 
+
+static int
+first_header(const char **data, int *len)
+{
+    int header_len;
+
+    /* Find the length of the next header */
+    header_len = 0;
+    while (*len > header_len + 1
+           && (*data)[header_len] != '\r'
+           && (*data)[header_len + 1] != '\n')
+        header_len++;
+
+    return header_len;
+}
+
 static int
 get_header(const char *header, const char *data, int data_len, char **value)
 {
     int len, header_len;
 
+    len = first_header(&data, &data_len);
     header_len = strlen(header);
 
     /* loop through headers stopping at first blank line */
-    while ((len = next_header(&data, &data_len)) != 0)
+    while (len != 0)
+    {
         if (len > header_len && strncasecmp(header, data, header_len) == 0) {
             /* Eat leading whitespace */
             while (header_len < len && isblank((unsigned char)data[header_len]))
@@ -274,6 +366,9 @@ get_header(const char *header, const char *data, int data_len, char **value)
             return len - header_len;
         }
 
+        len = next_header(&data, &data_len);
+    }
+
     /* If there is no data left after reading all the headers then we do not
      * have a complete HTTP request, there must be a blank line */
     if (data_len == 0)
@@ -285,8 +380,6 @@ get_header(const char *header, const char *data, int data_len, char **value)
 static int
 next_header(const char **data, int *len)
 {
-    int header_len;
-
     /* perhaps we can optimize this to reuse the value of header_len, rather
      * than scanning twice.
      * Walk our data stream until the end of the header */
@@ -299,14 +392,7 @@ next_header(const char **data, int *len)
     *data += 2;
     *len  -= 2;
 
-    /* Find the length of the next header */
-    header_len = 0;
-    while (*len > header_len + 1
-           && (*data)[header_len] != '\r'
-           && (*data)[header_len + 1] != '\n')
-        header_len++;
-
-    return header_len;
+    return first_header(data, len);
 }
 
 static void
