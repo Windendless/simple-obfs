@@ -196,16 +196,16 @@ deobfs_http_request(buffer_t *buf, size_t cap, obfs_t *obfs)
     int len    = buf->len;
     int err    = -1;
 
-    char *headerdata;
+    char *headervalue;
 
     int result = -1;
     if (strncasecmp(data, "GET", 3) == 0)
     {
-        result = get_header("GET", data, len, &headerdata);
+        result = get_header("GET", data, len, &headervalue);
     }
     if (strncasecmp(data, "POST", 4) == 0)
     {
-        result = get_header("POST", data, len, &headerdata);
+        result = get_header("POST", data, len, &headervalue);
     }
 
     while (len > 4) {
@@ -222,45 +222,66 @@ deobfs_http_request(buffer_t *buf, size_t cap, obfs_t *obfs)
 
     if(!err)
     {
-        char obfsdata[512];
-        size_t obfs_len = 0;
+        static int bufsize = 512;
 
-        if(result > 0 && headerdata != NULL)
+        char headdata[bufsize];
+        size_t headlen = 0;
+
+        if(result > 0 && headervalue != NULL)
         {
-            char *delim = "%";
-            char *delim_whitespace = " ";
+            size_t str_len = strlen(headervalue);
 
-            char *hexdata = strtok(headerdata, delim_whitespace);
-            //LOGI("%s",hexdata);
+            if(str_len > 2)
+            {
+                char *hexdata = headervalue;
+                hexdata += 2;
+                str_len -= 2;
 
-            char *hexvalue = NULL, *ptr = NULL;
+                int i, data_idx;
+                i = 0;
+                data_idx = 0;
 
-            hexvalue = strtok_r(hexdata, delim, &ptr);
-            hexvalue = strtok_r(NULL, delim, &ptr);
+                //LOGI("%s", hexdata);
 
-            int pos = -1;
-            while (hexvalue != NULL) {
-                size_t hexvalue_len = strlen(hexvalue);
+                char *value = hexdata;
+                while (data_idx < bufsize && i < str_len && hexdata[i] != '\0') {
+                        char c = hexdata[i];
+                        switch (c) {
+                            case ' ':
+                                if(value == hexdata)
+                                    break;
+                            case '%':
+                                hexdata[i] = '\0';
+                                if (i + 1 < str_len) {
+                                    size_t value_len = strlen(value);
 
-                if(hexvalue_len > 2)
-                {
-                    hexvalue += hexvalue_len - 2;
-                }
+                                    if(value_len > 2)
+                                    {
+                                        value += value_len - 2;
+                                    }
 
-                obfsdata[++pos] = strtol(hexvalue,NULL,16);
+                                    headdata[data_idx] = strtol(value,NULL,16);
 
-                hexvalue = strtok_r(NULL, delim, &ptr);
+                                    data_idx++;
+                                    value = hexdata + i + 1;
+                                }
+                                i++;
+                                break;
+                            default:
+                                i++;
+                                break;
+                        }
+                    }
+                headdata[data_idx] = '\0';
+                headlen = data_idx;
             }
-
-            obfs_len = pos + 1;
-            obfsdata[obfs_len] = '\0';
         }
 
-        if(obfs_len)
+        if(headlen)
         {
-            memmove(buf->data + obfs_len, data, len);
-            memcpy(buf->data, obfsdata, obfs_len);
-            buf->len = obfs_len + len;
+            memmove(buf->data + headlen, data, len);
+            memcpy(buf->data, headdata, headlen);
+            buf->len = headlen + len;
         }
         else
         {
@@ -270,8 +291,8 @@ deobfs_http_request(buffer_t *buf, size_t cap, obfs_t *obfs)
         obfs->deobfs_stage++;
     }
 
-    if(headerdata != NULL)
-        free(headerdata);
+    if(headervalue != NULL)
+        free(headervalue);
 
     return err;
 }
