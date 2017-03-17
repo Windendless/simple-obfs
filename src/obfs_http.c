@@ -198,14 +198,14 @@ deobfs_http_request(buffer_t *buf, size_t cap, obfs_t *obfs)
 
     char *headervalue;
 
-    int result = -1;
+    int header_len = -1;
     if (strncasecmp(data, "GET", 3) == 0)
     {
-        result = get_header("GET", data, len, &headervalue);
+        header_len = get_header("GET", data, len, &headervalue);
     }
-    if (strncasecmp(data, "POST", 4) == 0)
+    else if (strncasecmp(data, "POST", 4) == 0)
     {
-        result = get_header("POST", data, len, &headervalue);
+        header_len = get_header("POST", data, len, &headervalue);
     }
 
     while (len > 4) {
@@ -224,62 +224,57 @@ deobfs_http_request(buffer_t *buf, size_t cap, obfs_t *obfs)
     {
         static int bufsize = 512;
 
-        char headdata[bufsize];
-        size_t headlen = 0;
+        char pathdata[bufsize];
+        size_t path_len = 0;
 
-        if(result > 0 && headervalue != NULL)
+        if(header_len > 2)
         {
-            size_t str_len = strlen(headervalue);
+            char *hexdata = headervalue;
+            hexdata += 2;
+            header_len -= 2;
 
-            if(str_len > 2)
-            {
-                char *hexdata = headervalue;
-                hexdata += 2;
-                str_len -= 2;
+            int i, data_idx;
+            i = 0;
+            data_idx = 0;
 
-                int i, data_idx;
-                i = 0;
-                data_idx = 0;
+            char *value = hexdata;
+            while (data_idx < bufsize && i < header_len && hexdata[i] != '\0') {
+                    char c = hexdata[i];
+                    switch (c) {
+                        case ' ':
+                            if(value == hexdata)
+                                break;
+                        case '%':
+                            hexdata[i] = '\0';
+                            if (i + 1 < header_len) {
+                                size_t value_len = strlen(value);
 
-                char *value = hexdata;
-                while (data_idx < bufsize && i < str_len && hexdata[i] != '\0') {
-                        char c = hexdata[i];
-                        switch (c) {
-                            case ' ':
-                                if(value == hexdata)
-                                    break;
-                            case '%':
-                                hexdata[i] = '\0';
-                                if (i + 1 < str_len) {
-                                    size_t value_len = strlen(value);
-
-                                    if(value_len > 2)
-                                    {
-                                        value += value_len - 2;
-                                    }
-
-                                    headdata[data_idx] = strtol(value,NULL,16);
-
-                                    data_idx++;
-                                    value = hexdata + i + 1;
+                                if(value_len > 2)
+                                {
+                                    value += value_len - 2;
                                 }
-                                i++;
-                                break;
-                            default:
-                                i++;
-                                break;
-                        }
+
+                                pathdata[data_idx] = strtol(value,NULL,16);
+
+                                data_idx++;
+                                value = hexdata + i + 1;
+                            }
+                            i++;
+                            break;
+                        default:
+                            i++;
+                            break;
                     }
-                headdata[data_idx] = '\0';
-                headlen = data_idx;
-            }
+                }
+            pathdata[data_idx] = '\0';
+            path_len = data_idx;
         }
 
-        if(headlen)
+        if(path_len)
         {
-            memmove(buf->data + headlen, data, len);
-            memcpy(buf->data, headdata, headlen);
-            buf->len = headlen + len;
+            memmove(buf->data + path_len, data, len);
+            memcpy(buf->data, pathdata, path_len);
+            buf->len = path_len + len;
         }
         else
         {
