@@ -42,7 +42,7 @@ static const char *http_request_template =
 
 static const char *http_response_template =
     "HTTP/1.1 101 Switching Protocols\r\n"
-    "Server: nginx/1.%d.%d\r\n"
+    "Server: nginx\r\n"
     "Date: %s\r\n"
     "Upgrade: websocket\r\n"
     "Connection: Upgrade\r\n"
@@ -121,12 +121,6 @@ obfs_http_response(buffer_t *buf, size_t cap, obfs_t *obfs)
     if (obfs == NULL || obfs->obfs_stage != 0) return 0;
     obfs->obfs_stage++;
 
-    static int major_version = 0;
-    static int minor_version = 0;
-
-    major_version = major_version ? major_version : rand() % 11;
-    minor_version = minor_version ? minor_version : rand() % 12;
-
     char http_header[512];
     char datetime[64];
     uint8_t key[16];
@@ -145,7 +139,7 @@ obfs_http_response(buffer_t *buf, size_t cap, obfs_t *obfs)
     size_t buf_len  = buf->len;
     size_t obfs_len =
         snprintf(http_header, sizeof(http_header), http_response_template,
-                 major_version, minor_version, datetime, b64);
+                 datetime, b64);
 
     brealloc(buf, obfs_len + buf_len, cap);
 
