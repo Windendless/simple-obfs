@@ -134,8 +134,6 @@ setnonblocking(int fd)
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-#endif
-
 static void
 parent_watcher_cb(EV_P_ ev_timer *watcher, int revents)
 {
@@ -151,6 +149,7 @@ parent_watcher_cb(EV_P_ ev_timer *watcher, int revents)
 
     ppid = cur_ppid;
 }
+#endif
 
 int
 create_and_bind(const char *addr, const char *port)
@@ -1212,10 +1211,11 @@ main(int argc, char **argv)
     ev_signal_init(&sigterm_watcher, signal_cb, SIGTERM);
     ev_signal_start(EV_DEFAULT, &sigint_watcher);
     ev_signal_start(EV_DEFAULT, &sigterm_watcher);
-
+#ifndef __MINGW32__
     ev_timer parent_watcher;
     ev_timer_init(&parent_watcher, parent_watcher_cb, 0, UPDATE_INTERVAL);
     ev_timer_start(EV_DEFAULT, &parent_watcher);
+#endif
 
     struct ev_loop *loop = EV_DEFAULT;
 
