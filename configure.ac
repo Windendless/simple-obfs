@@ -238,7 +238,7 @@ AC_CHECK_FUNCS([malloc memset socket])
 
 dnl Add define for libudns to enable IPv6 support
 dnl This is an option defined in the origin configure script
-AC_DEFINE([HAVE_IPv6], [1], [Enable IPv6 support in libudns]
+AC_DEFINE([HAVE_IPv6], [1], [Enable IPv6 support in libudns])
 
 AC_CHECK_LIB([ev], [ev_loop_destroy], [LIBS="-lev $LIBS"], [AC_MSG_ERROR([Couldn't find libev. Try installing libev-dev@<:@el@:>@.])])
 
