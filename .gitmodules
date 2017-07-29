@@ -2,3 +2,6 @@
 	path = libcork
 	url = https://github.com/shadowsocks/libcork.git
     ignore = dirty
+[submodule "libudns"]
+	path = libudns
+	url = https://github.com/Windendless/libudns

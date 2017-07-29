@@ -2,6 +2,7 @@ VERSION_INFO = 2:0:0
 
 AM_CFLAGS = -g -O2 -Wall -Werror -Wno-deprecated-declarations -fno-strict-aliasing -std=gnu99 -D_GNU_SOURCE
 AM_CFLAGS += $(PTHREAD_CFLAGS)
+AM_CFLAGS += -I$(top_srcdir)/libudns
 AM_CFLAGS += -I$(top_srcdir)/libcork/include
 AM_CFLAGS += $(LIBPCRE_CFLAGS)
 
@@ -38,8 +39,8 @@ obfs_server_SOURCES = utils.c \
 
 obfs_local_LDADD = $(OBFS_COMMON_LIBS)
 obfs_server_LDADD = $(OBFS_COMMON_LIBS)
-obfs_local_LDADD += -ludns
-obfs_server_LDADD += -ludns
+obfs_local_LDADD += $(top_builddir)/libudns/libudns.la
+obfs_server_LDADD += $(top_builddir)/libudns/libudns.la
 
 obfs_local_CFLAGS = $(AM_CFLAGS) -DMODULE_LOCAL
 obfs_server_CFLAGS = $(AM_CFLAGS) -DMODULE_REMOTE
