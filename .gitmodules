@@ -3,11 +3,10 @@
 	url = https://github.com/Windendless/libcork.git
     ignore = dirty
 	branch = shadowsocks
-[submodule "libudns"]
-	path = libudns
-	url = https://github.com/Windendless/libudns
-    ignore = dirty
-	branch = shadowsocks
 [submodule "libev"]
 	path = libev
 	url = https://github.com/shadowsocks/libev
+[submodule "libudns"]
+	path = libudns
+	url = https://github.com/Windendless/libudns
+	branch = shadowsocks
